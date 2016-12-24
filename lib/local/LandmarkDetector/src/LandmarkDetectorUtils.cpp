@@ -2,7 +2,7 @@
 // Copyright (C) 2016, Carnegie Mellon University and University of Cambridge,
 // all rights reserved.
 //
-// THIS SOFTWARE IS PROVIDED “AS IS” FOR ACADEMIC USE ONLY AND ANY EXPRESS
+// THIS SOFTWARE IS PROVIDED ï¿½AS ISï¿½ FOR ACADEMIC USE ONLY AND ANY EXPRESS
 // OR IMPLIED WARRANTIES WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
 // THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
 // PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS
@@ -15,13 +15,13 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 // Notwithstanding the license granted herein, Licensee acknowledges that certain components
-// of the Software may be covered by so-called “open source” software licenses (“Open Source
-// Components”), which means any software licenses approved as open source licenses by the
+// of the Software may be covered by so-called ï¿½open sourceï¿½ software licenses (ï¿½Open Source
+// Componentsï¿½), which means any software licenses approved as open source licenses by the
 // Open Source Initiative or any substantially similar licenses, including without limitation any
 // license that, as a condition of distribution of the software licensed under such license,
 // requires that the distributor make the software available in source code format. Licensor shall
 // provide a list of Open Source Components for a particular version of the Software upon
-// Licensee’s request. Licensee will comply with the applicable terms of such licenses and to
+// Licenseeï¿½s request. Licensee will comply with the applicable terms of such licenses and to
 // the extent required by the licenses covering Open Source Components, the terms of such
 // licenses will apply in lieu of the terms of this Agreement. To the extent the terms of the
 // licenses applicable to Open Source Components prohibit any of the restrictions in this
@@ -38,20 +38,20 @@
 //       reports and manuals, must cite at least one of the following works:
 //
 //       OpenFace: an open source facial behavior analysis toolkit
-//       Tadas Baltrušaitis, Peter Robinson, and Louis-Philippe Morency
+//       Tadas Baltruï¿½aitis, Peter Robinson, and Louis-Philippe Morency
 //       in IEEE Winter Conference on Applications of Computer Vision, 2016  
 //
 //       Rendering of Eyes for Eye-Shape Registration and Gaze Estimation
-//       Erroll Wood, Tadas Baltrušaitis, Xucong Zhang, Yusuke Sugano, Peter Robinson, and Andreas Bulling 
+//       Erroll Wood, Tadas Baltruï¿½aitis, Xucong Zhang, Yusuke Sugano, Peter Robinson, and Andreas Bulling 
 //       in IEEE International. Conference on Computer Vision (ICCV),  2015 
 //
 //       Cross-dataset learning and person-speci?c normalisation for automatic Action Unit detection
-//       Tadas Baltrušaitis, Marwa Mahmoud, and Peter Robinson 
+//       Tadas Baltruï¿½aitis, Marwa Mahmoud, and Peter Robinson 
 //       in Facial Expression Recognition and Analysis Challenge, 
 //       IEEE International Conference on Automatic Face and Gesture Recognition, 2015 
 //
 //       Constrained Local Neural Fields for robust facial landmark detection in the wild.
-//       Tadas Baltrušaitis, Peter Robinson, and Louis-Philippe Morency. 
+//       Tadas Baltruï¿½aitis, Peter Robinson, and Louis-Philippe Morency. 
 //       in IEEE Int. Conference on Computer Vision Workshops, 300 Faces in-the-Wild Challenge, 2013.    
 //
 ///////////////////////////////////////////////////////////////////////////////
@@ -495,7 +495,7 @@ void get_image_input_output_params(vector<string> &input_image_files, vector<str
 //===========================================================================
 // Fast patch expert response computation (linear model across a ROI) using normalised cross-correlation
 //===========================================================================
-
+#if 0
 void crossCorr_m( const cv::Mat_<float>& img, cv::Mat_<double>& img_dft, const cv::Mat_<float>& _templ, map<int, cv::Mat_<double> >& _templ_dfts, cv::Mat_<float>& corr)
 {
 	// Our model will always be under min block size so can ignore this
@@ -589,6 +589,145 @@ void crossCorr_m( const cv::Mat_<float>& img, cv::Mat_<double>& img_dft, const c
 	src.convertTo(cdst, CV_32F);
 
 }
+#else
+
+// This version of crossCorr_m uses im2col instead of dft
+cv::Mat1f im2col(const cv::Mat1f& input, const cv::Size& kernel_size) {
+	const int rowBlock = kernel_size.height;
+	const int colBlock = kernel_size.width;
+
+	const int m = input.rows;
+	const int n = input.cols;
+
+	// using right x = col; y = row
+	const int yB = m - rowBlock + 1;
+	const int xB = n - colBlock + 1;
+
+	// you know the size of the result in the beginning, so allocate it all at once
+	cv::Mat1f result2(xB * yB, rowBlock * colBlock);
+	for (int i = 0; i < yB; ++i) {
+		for (int j = 0; j < xB; ++j) {
+			// here yours is in different order than I first thought:
+			// int rowIdx = j + i*xB;    // my intuition how to index the result
+			const int rowIdx = i + j * yB;
+
+			for (unsigned int yy = 0; yy < rowBlock; ++yy) {
+				for (unsigned int xx = 0; xx < colBlock; ++xx) {
+					// here take care of the transpose in the original method
+					// int colIdx = xx + yy*colBlock; // this would be not transposed
+					const int colIdx = xx * rowBlock + yy;
+					result2. at<float>(rowIdx, colIdx) = input.at<float>(i + yy, j + xx);
+				}
+			}
+		}
+	}
+	return result2;
+}
+
+void crossCorr_m( const cv::Mat_<float>& img, cv::Mat_<double>& img_dft, const cv::Mat_<float>& _templ, map<int, cv::Mat_<double> >& _templ_dfts, cv::Mat_<float>& corr)
+{
+	// Our model will always be under min block size so can ignore this
+	//const double blockScale = 4.5;
+	//const int minBlockSize = 256;
+
+	cv::imshow("img", img/255);//im2col
+	const cv::Mat1f col_img = im2col(img, cv::Size(_templ.cols, _templ.rows));
+	cv::imshow("im2col", col_img/255);
+
+	std::cout << "img:     " << img.rows << " " << img.cols << std::endl;
+	std::cout << "_templ:  " << _templ.rows << " " << _templ.cols << std::endl;
+	std::cout << "col_img: " << col_img.rows << " " << col_img.cols << std::endl;
+
+	cv::waitKey(0);
+
+	int maxDepth = CV_64F;
+
+	cv::Size dftsize;
+
+	dftsize.width = cv::getOptimalDFTSize(corr.cols + _templ.cols - 1);
+	dftsize.height = cv::getOptimalDFTSize(corr.rows + _templ.rows - 1);
+
+	// Compute block size
+	cv::Size blocksize;
+	blocksize.width = dftsize.width - _templ.cols + 1;
+	blocksize.width = MIN( blocksize.width, corr.cols );
+	blocksize.height = dftsize.height - _templ.rows + 1;
+	blocksize.height = MIN( blocksize.height, corr.rows );
+
+	cv::Mat_<double> dftTempl;
+
+	// if this has not been precomputed, precompute it, otherwise use it
+	if(_templ_dfts.find(dftsize.width) == _templ_dfts.end())
+	{
+		dftTempl.create(dftsize.height, dftsize.width);
+
+		cv::Mat_<float> src = _templ;
+
+		cv::Mat_<double> dst(dftTempl, cv::Rect(0, 0, dftsize.width, dftsize.height));
+
+		cv::Mat_<double> dst1(dftTempl, cv::Rect(0, 0, _templ.cols, _templ.rows));
+
+		if( dst1.data != src.data )
+			src.convertTo(dst1, dst1.depth());
+
+		if( dst.cols > _templ.cols )
+		{
+			cv::Mat_<double> part(dst, cv::Range(0, _templ.rows), cv::Range(_templ.cols, dst.cols));
+			part.setTo(0);
+		}
+
+		// Perform DFT of the template
+		dft(dst, dst, 0, _templ.rows);
+
+		_templ_dfts[dftsize.width] = dftTempl;
+
+	}
+	else
+	{
+		// use the precomputed version
+		dftTempl = _templ_dfts.find(dftsize.width)->second;
+	}
+
+	cv::Size bsz(std::min(blocksize.width, corr.cols), std::min(blocksize.height, corr.rows));
+	cv::Mat src;
+
+	cv::Mat cdst(corr, cv::Rect(0, 0, bsz.width, bsz.height));
+
+	cv::Mat_<double> dftImg;
+
+	if(img_dft.empty())
+	{
+		dftImg.create(dftsize);
+		dftImg.setTo(0.0);
+
+		cv::Size dsz(bsz.width + _templ.cols - 1, bsz.height + _templ.rows - 1);
+
+		int x2 = std::min(img.cols, dsz.width);
+		int y2 = std::min(img.rows, dsz.height);
+
+		cv::Mat src0(img, cv::Range(0, y2), cv::Range(0, x2));
+		cv::Mat dst(dftImg, cv::Rect(0, 0, dsz.width, dsz.height));
+		cv::Mat dst1(dftImg, cv::Rect(0, 0, x2, y2));
+
+		src = src0;
+
+		if( dst1.data != src.data )
+			src.convertTo(dst1, dst1.depth());
+
+		dft( dftImg, dftImg, 0, dsz.height );
+		img_dft = dftImg.clone();
+	}
+
+	cv::Mat dftTempl1(dftTempl, cv::Rect(0, 0, dftsize.width, dftsize.height));
+	cv::mulSpectrums(img_dft, dftTempl1, dftImg, 0, true);
+	cv::dft( dftImg, dftImg, cv::DFT_INVERSE + cv::DFT_SCALE, bsz.height );
+
+	src = dftImg(cv::Rect(0, 0, bsz.width, bsz.height));
+
+	src.convertTo(cdst, CV_32F);
+
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
